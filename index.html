@@ -639,7 +639,7 @@ function onMotion(e){
   if(su<0){su=-su;sr=-sr}
   const roll=Math.atan2(-sr,su)*57.2958; // + = right edge down (lean right)
   if(!tilt.live){tilt.live=true;tilt.roll=roll}
-  tilt.roll+=(roll-tilt.roll)*.3;tilt.seen=performance.now();
+  tilt.roll+=(roll-tilt.roll)*.12;tilt.seen=performance.now();
 }
 function tiltUpdate(dt){
   const live=tilt.live&&performance.now()-tilt.seen<1500;
@@ -647,10 +647,10 @@ function tiltUpdate(dt){
   if(live&&G.on&&G.gt<0){tilt.roll0=tilt.roll}
   else if(live&&!G.on){tilt.roll0=tilt.roll}
   let t=0;
-  if(live&&S.tilt){const rng={low:26,normal:19,high:13}[S.sens]||19,dz=2.2,d=tilt.roll-tilt.roll0;t=Math.abs(d)<dz?0:(d-Math.sign(d)*dz)/(rng-dz)}
+  if(live&&S.tilt){const rng={low:48,normal:36,high:26}[S.sens]||36,dz=5,d=tilt.roll-tilt.roll0;t=Math.abs(d)<dz?0:(d-Math.sign(d)*dz)/(rng-dz)}
   const k=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0);
   const raw=clamp(t+k+tilt.pad,-1,1);
-  head.tx=raw*.95;head.x+=(head.tx-head.x)*(1-Math.exp(-dt*13));
+  head.tx=raw*.95;head.x+=(head.tx-head.x)*(1-Math.exp(-dt*6));
   $('leanPad').style.display=(G.on&&isTouch&&!live)?'flex':'none';
   $('lean').style.display=(G.on&&live)?'block':'none';
   $('leanDot').style.left=(50+head.x/.95*46)+'%';
