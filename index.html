@@ -46,7 +46,7 @@ body.playing #hud{display:block}
 #rank{font:700 clamp(28px,5.6vw,44px)/1 var(--ui);text-shadow:0 0 14px currentColor}
 #acc{font:700 14px var(--ui);color:var(--dim);letter-spacing:.08em}
 .hudbtn{pointer-events:auto;position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(10,6,26,.6);font-size:15px;letter-spacing:-2px}
-#leanPad{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:12px;pointer-events:auto}
+#leanPad{display:none!important;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:12px;pointer-events:auto}
 #leanPad button{width:64px;height:64px;border-radius:18px;border:1px solid var(--line);background:rgba(10,6,26,.55);font-size:22px;touch-action:none}
 #leanPad button.on{background:rgba(176,107,255,.45);border-color:var(--acc)}
 #lean{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom,0px));width:120px;height:4px;border-radius:3px;background:rgba(255,255,255,.14);display:none}
@@ -141,7 +141,7 @@ input[type=range]{width:min(220px,50vw);accent-color:#b06bff}
       <div class="diffs" id="diffs"></div>
       <div class="stats" id="dStats"></div>
       <button class="btn big" id="btnPlay">PLAY</button>
-      <div class="how"><span class="dot" style="background:var(--red)"></span><b>Left half</b> drags the red blade, <span class="dot" style="background:var(--blue)"></span><b>right half</b> the blue one. Swipe through each block in the direction of its arrow. <b>Tilt your phone</b> (or hold ◀ ▶ / A D) to lean and dodge walls. Best in landscape.</div>
+      <div class="how"><span class="dot" style="background:var(--red)"></span><b>Left half</b> drags the red blade, <span class="dot" style="background:var(--blue)"></span><b>right half</b> the blue one. Swipe through each block in the direction of its arrow. Walls dodge automatically. Best in landscape.</div>
     </div>
   </div>
 </div>
@@ -642,19 +642,13 @@ function onMotion(e){
   tilt.roll+=(roll-tilt.roll)*.12;tilt.seen=performance.now();
 }
 function tiltUpdate(dt){
-  const live=tilt.live&&performance.now()-tilt.seen<1500;
-  // neutral roll is captured while the pre-roll counts in, then frozen
-  if(live&&G.on&&G.gt<0){tilt.roll0=tilt.roll}
-  else if(live&&!G.on){tilt.roll0=tilt.roll}
+  // auto-lean: step out of the way of walls
   let t=0;
-  if(live&&S.tilt){const rng={low:48,normal:36,high:26}[S.sens]||36,dz=5,d=tilt.roll-tilt.roll0;t=Math.abs(d)<dz?0:(d-Math.sign(d)*dz)/(rng-dz)}
-  const k=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0);
-  const raw=clamp(t+k+tilt.pad,-1,1);
-  head.tx=raw*.95;head.x+=(head.tx-head.x)*(1-Math.exp(-dt*6));
-  $('leanPad').style.display=(G.on&&isTouch&&!live)?'flex':'none';
-  $('lean').style.display=(G.on&&live)?'block':'none';
-  $('leanDot').style.left=(50+head.x/.95*46)+'%';
-  return live;
+  if(G.on&&!G.paused&&G.D){const spd=G.D.spd;
+    for(const o of G.wallObjs){const len=o.g.userData.len,zf=o.zf,zb=zf-len;
+      if(zf>-spd*.6&&zb<.5){t=o.w.side==='L'?.7:o.w.side==='R'?-.7:.85;break}}}
+  head.tx=t;head.x+=(head.tx-head.x)*(1-Math.exp(-dt*9));
+  return false;
 }
 
 /* ============================== GAMEPLAY ============================== */
@@ -665,7 +659,7 @@ function resetStats(){Object.assign(G,{score:0,combo:0,maxCombo:0,lvl:0,prog:0,e
   pieces.forEach(p=>{p.life=0;p.m.visible=false});spLife.fill(0);spPos.fill(-100);$('pops').innerHTML=''}
 function startGame(){
   initAudio();if(!ctx){banner('Audio not supported','Try Chrome or Safari',3);return}
-  ctx.resume();enableTilt();
+  ctx.resume();
   try{const el=document.documentElement;if(!document.fullscreenElement&&el.requestFullscreen){el.requestFullscreen({navigationUI:'hide'}).then(()=>{try{screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}).catch(()=>{})}}catch(e){}
   const s=SONGS[S.song];G.song=s;G.di=S.diff;G.D=DIFFS[S.diff];G.map=genMap(s,S.diff);
   bus.dly.delayTime.value=60/s.bpm*.75;bus.master.gain.value=S.volume;
@@ -743,7 +737,7 @@ function updateItems(gt,dt){
     if(zf>-.15&&zb<.15)hintSide=null;
   }
   const h=$('hint');
-  if(hintSide){h.textContent=hintSide==='L'?'LEAN ▶':hintSide==='R'?'◀ LEAN':'◀ LEAN ▶';h.style.opacity=1}else h.style.opacity=0;
+  if(hintSide){h.textContent=hintSide==='L'?'▶':hintSide==='R'?'◀':'◀ ▶';h.style.opacity=1}else h.style.opacity=0;
   if(inWall){if(!G.inWall){sfxBoom();vib(60)}G.inWall=true;G.dmgT=.3;addEnergy(-.34*dt)}else G.inWall=false;
 }
 function processCuts(gt){
@@ -904,7 +898,7 @@ function renderMenu(){
   const box=$('songs');box.innerHTML='';
   SONGS.forEach((s,i)=>{const el=document.createElement('div');el.className='card'+(i===S.song?' sel':'');
     const hasWalls=(s.walls||[]).length>0;
-    el.innerHTML='<canvas width="168" height="168"></canvas><div class="meta"><h3>'+s.title+'</h3><p>'+s.genre+' · '+s.bpm+' BPM · '+fmtT(s.endT)+'</p>'+(hasWalls?'<span class="tag">LEAN · WALLS</span>':'')+'</div>';
+    el.innerHTML='<canvas width="168" height="168"></canvas><div class="meta"><h3>'+s.title+'</h3><p>'+s.genre+' · '+s.bpm+' BPM · '+fmtT(s.endT)+'</p>'+(hasWalls?'<span class="tag">WALLS</span>':'')+'</div>';
     drawCover(el.querySelector('canvas'),i);el.onclick=()=>{S.song=i;saveS();renderMenu()};box.appendChild(el)});
   const s=SONGS[S.song];$('dTitle').textContent=s.title;$('dSub').textContent=s.genre+' · '+s.bpm+' BPM · original track';
   const df=$('diffs');df.innerHTML='';
@@ -915,24 +909,20 @@ function renderMenu(){
 const setCfg=[
  ['Cut rules','rules',[['relaxed','Relaxed'],['strict','Strict']]],
  ['Graphics','quality',[['auto','Auto'],['low','Low'],['med','Medium'],['high','High']]],
- ['Tilt to lean','tilt',[[true,'On'],[false,'Off']]],
- ['Tilt strength','sens',[['low','Gentle'],['normal','Normal'],['high','Sharp']]],
  ['Vibration','vibrate',[[true,'On'],[false,'Off']]],
  ['No fail','nofail',[[false,'Off'],[true,'On']]]];
 function renderSettings(){
   const r=$('setRows');r.innerHTML='';
   setCfg.forEach(([label,key,opts])=>{const row=document.createElement('div');row.className='row';row.innerHTML='<label>'+label+'</label>';const seg=document.createElement('div');seg.className='seg';
-    opts.forEach(([v,t])=>{const b=document.createElement('button');b.textContent=t;if(S[key]===v)b.className='sel';b.onclick=()=>{S[key]=v;saveS();if(key==='quality')buildRender();if(key==='tilt'&&v)enableTilt();renderSettings()};seg.appendChild(b)});row.appendChild(seg);r.appendChild(row)});
+    opts.forEach(([v,t])=>{const b=document.createElement('button');b.textContent=t;if(S[key]===v)b.className='sel';b.onclick=()=>{S[key]=v;saveS();if(key==='quality')buildRender();renderSettings()};seg.appendChild(b)});row.appendChild(seg);r.appendChild(row)});
   const mkR=(label,key,min,max,step,fmt)=>{const row=document.createElement('div');row.className='row';row.innerHTML='<label>'+label+'</label>';const wrap=document.createElement('div');wrap.style.cssText='display:flex;gap:10px;align-items:center';
     const inp=document.createElement('input');inp.type='range';inp.min=min;inp.max=max;inp.step=step;inp.value=S[key];const out=document.createElement('span');out.textContent=fmt(S[key]);out.style.minWidth='56px';out.style.textAlign='right';
     inp.oninput=()=>{S[key]=+inp.value;out.textContent=fmt(S[key]);if(key==='volume'&&bus.master)bus.master.gain.value=S.volume};inp.onchange=saveS;wrap.append(inp,out);row.appendChild(wrap);r.appendChild(row)};
   mkR('Volume','volume',0,1,.05,v=>Math.round(v*100)+'%');
   mkR('Audio sync offset','offset',-150,300,10,v=>(v>0?'+':'')+v+' ms');
-  const live=tilt.live&&performance.now()-tilt.seen<1500;
-  $('tiltNote').textContent=live?'Tilt sensor active. Hold your phone level for a second at the start of each song, then tilt left or right to lean.':
-    (isTouch?'Tilt sensor not detected yet. Tilt needs the page opened over HTTPS in your own browser (not inside another app). Hold ◀ ▶ on screen instead.':'No tilt sensor on this device. Use A / D or the arrow keys to lean.')+' Raise the sync offset if you hear the beat after the blocks (Bluetooth headphones).';
+  $('tiltNote').textContent='Walls move you out of the way automatically. Raise the sync offset if you hear the beat after the blocks (Bluetooth headphones).';
 }
-$('btnSet').onclick=()=>{renderSettings();$('settings').classList.add('on');enableTilt()};
+$('btnSet').onclick=()=>{renderSettings();$('settings').classList.add('on')};
 $('setDone').onclick=()=>$('settings').classList.remove('on');
 $('btnPlay').onclick=startGame;
 $('pauseBtn').onclick=e=>{e.stopPropagation();pauseGame()};
